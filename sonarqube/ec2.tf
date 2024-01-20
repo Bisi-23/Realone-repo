@@ -29,12 +29,20 @@ resource "aws_default_subnet" "default_az1" {
 
 
 # create security group for the ec2 instance
-resource "aws_security_group" "ec2_security_group_jenkins" {
-  name        = "ec2 security group_jenkins"
+resource "aws_security_group" "ec2_security_group_sonarqube" {
+  name        = "ec2 security group_sonarqube"
   description = "allow access on ports 8080 and 22"
   vpc_id      = aws_default_vpc.default_vpc.id
 
   # allow access on port 8080
+  ingress {
+    description      = "sonarqube access"
+    from_port        = 9000
+    to_port          = 9000
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
   ingress {
     description      = "http proxy access"
     from_port        = 8080
@@ -58,9 +66,9 @@ resource "aws_security_group" "ec2_security_group_jenkins" {
     protocol         = -1
     cidr_blocks      = ["0.0.0.0/0"]
   }
- 
+
   tags   = {
-    Name = "jenkins server security group"
+    Name = "sonarqube server security group"
   }
 }
 
@@ -86,49 +94,18 @@ data "aws_ami" "ubuntu" {
 # launch the ec2 instance and install website
 resource "aws_instance" "ec2_instance" {
   ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t2.small"
+  instance_type          = "t2.medium"
   subnet_id              = aws_default_subnet.default_az1.id
-  vpc_security_group_ids = [aws_security_group.ec2_security_group_jenkins.id]
+  vpc_security_group_ids = [aws_security_group.ec2_security_group_sonarqube.id]
   key_name               = "public-kp"
-  # user_data            = file("install_jenkins.sh")
+  user_data = "${file("install_sonarqube.sh")}"
 
   tags = {
-    Name = "jenkins_server"
+    Name = "sonarqube_server"
   }
 }
 
-
-# an empty resource block
-resource "null_resource" "name" {
-
-  # ssh into the ec2 instance 
-  connection {
-    type        = "ssh"
-    user        = "ubuntu"
-    private_key = file("~/Downloads/public-kp.pem")
-    host        = aws_instance.ec2_instance.public_ip
-  }
-
-  # copy the install_jenkins.sh file from your computer to the ec2 instance 
-  provisioner "file" {
-    source      = "install_jenkins.sh"
-    destination = "/tmp/install_jenkins.sh"
-  }
-
-  # set permissions and run the install_jenkins.sh file
-  provisioner "remote-exec" {
-    inline = [
-        "sudo chmod +x /tmp/install_jenkins.sh",
-        "sh /tmp/install_jenkins.sh",
-    ]
-  }
-
-  # wait for ec2 to be created
-  depends_on = [aws_instance.ec2_instance]
-}
-
-
-# print the url of the jenkins server
+# print the url of the sonarqube server
 output "website_url" {
-  value     = join ("", ["http://", aws_instance.ec2_instance.public_dns, ":", "8080"])
+  value     = join ("", ["http://", aws_instance.ec2_instance.public_dns, ":", "9000"])
 }
